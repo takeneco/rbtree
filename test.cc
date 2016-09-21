@@ -7,11 +7,14 @@ exit
 #include <vector>
 #include <sys/time.h>
 
-#include "order_cover.hh"
+#include "seqcover.hh"
 #include "rbtree.hh"
 
 
-int COMP(value_t k1, value_t k2) {
+using covkey_t = unsigned short;
+using intcov = seq_cover<covkey_t>;
+
+int COMP(covkey_t k1, covkey_t k2) {
 	if (k1 < k2) return -1;
 	if (k1 > k2) return 1;
 	return 0;
@@ -20,15 +23,15 @@ int COMP(value_t k1, value_t k2) {
 struct NODE
 {
 	rbtree_node<NODE> node;
-	value_t key;
+	covkey_t key;
 };
 using TREE = rbtree_<
-    value_t,                 // KEY_TYPE
+    covkey_t,                 // KEY_TYPE
     NODE,                   // VALUE_TYPE
     &COMP,               // KEY_COMPARE
     rbtree_node<NODE> NODE::*, // LINK_METHOD
     &NODE::node,         // LINK
-    value_t NODE::*,            // KEY_METHOD
+    covkey_t NODE::*,            // KEY_METHOD
     &NODE::key              // KEY
 >;
 
@@ -65,21 +68,21 @@ struct time_sum
 
 unsigned long unit_cnt = 0;
 
-void unit_one(value_t n, cover& cov)
+void unit_one(covkey_t n, intcov& cov)
 {
 	std::vector<bool> flags(n, false);
 	TREE tree;
 	NODE* nodes = new NODE[n];
 
-	for (value_t i = 0; i < n; ++i)
+	for (covkey_t i = 0; i < n; ++i)
 		nodes[i].key = i;
 
 	timeval t_t1, t_t2;
 
 	gettimeofday(&t_t1, nullptr);
-	for (value_t i = 0; ; ++i) {
-		value_t val = cov.get_order(i);
-		if (val == VALUE_INVALID)
+	for (covkey_t i = 0; ; ++i) {
+		covkey_t val = cov.get_seq(i);
+		if (val == cov.INVALID)
 			break;
 
 		if (!flags[val])
@@ -99,21 +102,21 @@ void unit_one(value_t n, cover& cov)
 	delete [] nodes;
 }
 
-void unit(value_t n, cover& cov)
+void unit(covkey_t n, intcov& cov)
 {
 	std::vector<bool> flags(n, false);
 	TREE tree;
 	NODE* nodes = new NODE[n];
 
-	for (value_t i = 0; i < n; ++i)
+	for (covkey_t i = 0; i < n; ++i)
 		nodes[i].key = i;
 
 	timeval t_t1, t_t2;
 
 	gettimeofday(&t_t1, nullptr);
-	for (value_t i = 0; ; ++i) {
-		value_t val = cov.get_order(i);
-		if (val == VALUE_INVALID)
+	for (covkey_t i = 0; ; ++i) {
+		covkey_t val = cov.get_seq(i);
+		if (val == cov.INVALID)
 			break;
 
 		if (!flags[val])
@@ -130,7 +133,7 @@ void unit(value_t n, cover& cov)
 	delete [] nodes;
 }
 
-void report(const cover& cov)
+void report(const intcov& cov)
 {
 	std::cout <<
 	"--------------\nunit/cut  : " <<
@@ -138,17 +141,17 @@ void report(const cover& cov)
 	"\nunit time : ";
 	unit_time.print();
 	std::cout << "\nstate     : ";
-	for (value_t i = 0; ; ++i) {
-		value_t stat = cov.get_state(i);
-		if (stat == VALUE_INVALID) {
+	for (covkey_t i = 0; ; ++i) {
+		covkey_t stat = cov.get_state(i);
+		if (stat == cov.INVALID) {
 			break;
 		}
 		std::cout << stat << ',';
 	}
 	std::cout << "\norder     : ";
-	for (value_t i = 0; ; ++i) {
-		value_t val = cov.get_order(i);
-		if (val == VALUE_INVALID) {
+	for (covkey_t i = 0; ; ++i) {
+		covkey_t val = cov.get_seq(i);
+		if (val == cov.INVALID) {
 			std::cout << std::endl;
 			break;
 		}
@@ -156,11 +159,11 @@ void report(const cover& cov)
 	}
 }
 
-void print_order(const cover& cov)
+void print_order(const intcov& cov)
 {
-	for (value_t i = 0; ; ++i) {
-		value_t val = cov.get_order(i);
-		if (val == VALUE_INVALID) {
+	for (covkey_t i = 0; ; ++i) {
+		covkey_t val = cov.get_seq(i);
+		if (val == cov.INVALID) {
 			std::cout << std::endl;
 			break;
 		}
@@ -171,15 +174,15 @@ void print_order(const cover& cov)
 void test_one()
 {
 	const int n = 6;
-	value_t order[n * 2] = {
+	covkey_t order[n * 2] = {
 	0,5,5,4,4,3,3,2,2,1,1,0,
 	};
 
-	cover cov(n, 2);
+	intcov cov(n, 2);
 	cov.setup();
 
-	for (value_t i = 0; i < (n * 2); ++i)
-		cov.set_order(order[i], i);
+	for (covkey_t i = 0; i < (n * 2); ++i)
+		cov.set_seq(order[i], i);
 
 	print_order(cov);
 	unit_one(n, cov);
@@ -193,16 +196,16 @@ void test_one()
 void test_from()
 {
 	const int n = 6;
-	value_t start_state[n * 2] = {
+	covkey_t start_state[n * 2] = {
 	0,9,7,3,0,0,2,4,1,0,1,0,
 	};
 
-	cover cov(n, 2);
+	intcov cov(n, 2);
 	cov.setup();
 
-	for (value_t i = 0; i < (n * 2); ++i)
+	for (covkey_t i = 0; i < (n * 2); ++i)
 		cov.set_state(start_state[i], i);
-	cov.update_order();
+	cov.update_seq();
 
 	for (;;) {
 		print_order(cov);
@@ -224,9 +227,9 @@ void test_from()
 	cov.unsetup();
 }
 
-void test(value_t n)
+void test(covkey_t n)
 {
-	cover cov(n, 2);
+	intcov cov(n, 2);
 	cov.setup();
 
 	for (;;) {
@@ -254,14 +257,14 @@ int main(int argc, const char* argv[])
 
 	//test_from();
 
-	value_t from = 1;
-	value_t to = 8;
+	covkey_t from = 1;
+	covkey_t to = 8;
 	if (argc >= 2)
 		from = atoi(argv[1]);
 	if (argc >= 3)
 		to = atoi(argv[2]);
 
-	for (value_t n = from; n <= to; ++n) {
+	for (covkey_t n = from; n <= to; ++n) {
 		test(n);
 	}
 
