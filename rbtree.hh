@@ -1,7 +1,7 @@
-#if 0
-g++ -std=c++11 -o ${0/cc/out} $0
-exit
-#endif
+
+#ifndef RBTREE_HH_
+#define RBTREE_HH_
+
 
 template<class A, class B, class D, D E>
 class member_ptr
@@ -19,67 +19,58 @@ public:
 	static RETURN* p(CLASS* x) { return (x->*FUNC)(); }
 };
 
-template<class VALUE_TYPE>
 class rbtree_node
 {
-	using self_t = rbtree_node<VALUE_TYPE>;
 public:
 	rbtree_node() :
 		parent(),
-		child(),
-		// hand(),  // no appropriate initial value.
+		left(), right(),
 		color(RED)
 	{}
 
+	/*
 	self_t& operator = (const rbtree_node<VALUE_TYPE>& x) {
 		parent = x.parent;
-		child[LEFT] = child[LEFT];
-		child[RIGHT] = child[RIGHT];
-		side = x.side;
+		left = x.left;
+		right = x.right;
 		color = x.color;
 		return *this;
 	}
+	*/
 
 	void clear() {
-		color = 0;
-		child[RIGHT] = child[LEFT] = parent = nullptr;
+		color = RED;
+		right = left = parent = nullptr;
 	}
 
 	enum COLOR { RED = 0, BLACK = 1, };
-	enum SIDE { LEFT = 0, RIGHT = 1, };
 
 //private:
-	VALUE_TYPE* parent;
-	VALUE_TYPE* child[2]; // left and right
-	SIDE side;   // this = parent->child[side]
+	rbtree_node* parent;
+	rbtree_node* left;
+	rbtree_node* right;
 	COLOR color;
 };
 
-template<
-    class KEY_TYPE,
-    class VALUE_TYPE,
-    int (*KEY_COMPARE)(KEY_TYPE, KEY_TYPE),
-    class NODE_METHOD,
-    NODE_METHOD NODE,
-    class KEY_METHOD,
-    KEY_METHOD KEY
->
-class rbtree_
+class rbtree
 {
-	using COLOR = typename rbtree_node<VALUE_TYPE>::COLOR;
-	using SIDE = typename rbtree_node<VALUE_TYPE>::SIDE;
-	using node_type = rbtree_node<VALUE_TYPE>;
+public:
+	using COLOR = rbtree_node::COLOR;
+	using VALUE_TYPE = rbtree_node;
+	using node = rbtree_node;
 	using val_t = VALUE_TYPE;
 
 public:
-	rbtree_() :
+	rbtree() :
 		root(nullptr)
 	{}
-
+	/*
 	VALUE_TYPE* insert(VALUE_TYPE* val) {
 		auto r = _insert(val);
 		return r;
 	}
+	*/
+	/*
 	void remove(KEY_TYPE key) {
 		auto cur = root;
 		while (cur) {
@@ -95,9 +86,11 @@ public:
 		}
 		//return nullptr;
 	}
+	*/
 	void remove(VALUE_TYPE* val) {
 		_remove(val);
 	}
+	/*
 	bool validate() {
 		if (!root)
 			return true;
@@ -127,6 +120,8 @@ public:
 		}
 		return true;
 	}
+	*/
+	/*
 	void print(const char* note = nullptr) {
 		if (note)
 			std::cout << note << ':';
@@ -149,32 +144,27 @@ public:
 		}
 		std::cout << ']' << std::flush;
 	}
+	*/
 
 private:
-	rbtree_node<VALUE_TYPE>* node_of(VALUE_TYPE* val) {
-		return member_ptr
-		    <rbtree_node<VALUE_TYPE>, VALUE_TYPE, NODE_METHOD, NODE>::p
-		    (val);
+	node* node_of(VALUE_TYPE* val) {
+		return val;
 	}
+	/*
 	KEY_TYPE key_of(VALUE_TYPE* val) {
 		return *member_ptr
 		    <KEY_TYPE, VALUE_TYPE, KEY_METHOD, KEY>::p
 		    (val);
 	}
+	*/
 	VALUE_TYPE* parent_of(VALUE_TYPE* val) {
 		return node_of(val)->parent;
 	}
-	SIDE side_of_parent(VALUE_TYPE* val) {
-		return node_of(val)->side;
-	}
 	VALUE_TYPE* left_of(VALUE_TYPE* val) {
-		return node_of(val)->child[SIDE::LEFT];
+		return node_of(val)->left;
 	}
 	VALUE_TYPE* right_of(VALUE_TYPE* val) {
-		return node_of(val)->child[SIDE::RIGHT];
-	}
-	int comp(KEY_TYPE a, KEY_TYPE b) {
-		return (*KEY_COMPARE)(a, b);
+		return node_of(val)->right;
 	}
 	bool is_red(VALUE_TYPE* val) {
 		return node_of(val)->color == COLOR::RED;
@@ -189,16 +179,14 @@ private:
 		node_of(val)->parent = parent;
 	}
 	void set_left(VALUE_TYPE* parent, VALUE_TYPE* left) {
-		node_of(parent)->child[SIDE::LEFT] = left;
+		node_of(parent)->left = left;
 		//auto left_node = node_of(left);
 		//left_node->parent = parent;
-		//left_node->side = SIDE::LEFT;
 	}
 	void set_right(VALUE_TYPE* parent, VALUE_TYPE* right) {
-		node_of(parent)->child[SIDE::RIGHT] = right;
+		node_of(parent)->right = right;
 		//auto right_node = node_of(right);
 		//right_node->parent = parent;
-		//right_node->side = SIDE::RIGHT;
 	}
 	void change_child(
 	    VALUE_TYPE* parent, VALUE_TYPE* old_child, VALUE_TYPE* new_child) {
@@ -248,6 +236,7 @@ private:
 		set_parent(tmp, val);
 		return rotate_left(val);
 	}
+	/*
 	VALUE_TYPE* _insert(VALUE_TYPE* val)
 	{
 		KEY_TYPE val_key = key_of(val);
@@ -302,6 +291,7 @@ private:
 		}
 		return nullptr;
 	}
+	*/
 	VALUE_TYPE* balance(VALUE_TYPE* val)
 	{
 		auto val_node = node_of(val);
@@ -509,3 +499,69 @@ private:
 	VALUE_TYPE* root;
 };
 
+template <
+    int (*COMPARE)(const rbtree::node&, const rbtree::node&)
+>
+class rbtree_of : public rbtree
+{
+public:
+	node* insert(node* n) {
+	}
+
+private:
+	node* put(node* new_node) {
+		node* cur = root;
+		if (cur == nullptr) {
+			root = new_node;
+			set_color(new_node, COLOR::BLACK);
+			return nullptr;
+		}
+		for (;;) {
+			auto cur_node = node_of(cur);
+			int c = COMPARE(*new_node, *cur);
+			if (c < 0) {
+				if (left_of(cur)) {
+					cur = left_of(cur);
+				} else {
+					set_left(cur, new_node);
+					set_parent(new_node, cur);
+					break;
+				}
+			} else if (c > 0) {
+				if (right_of(cur)) {
+					cur = right_of(cur);
+				} else {
+					set_right(cur, new_node);
+					set_parent(new_node, cur);
+					break;
+				}
+			} else {
+				// 同値にあたった
+				//node_of(val) = r_node;
+				//r_node.clear();
+				return cur;
+			}
+		}
+		for (;;) {
+			auto parent = parent_of(cur);
+			auto tmp = balance(cur);
+			if (parent == nullptr) {
+				root = tmp;
+				set_parent(root, nullptr);
+				set_color(root, COLOR::BLACK);
+				break;
+			} else {
+				if (left_of(parent) == cur)
+					set_left(parent, tmp);
+				else
+					set_right(parent, tmp);
+				set_parent(tmp, parent);
+			}
+			cur = parent;
+		}
+		return nullptr;
+	}
+};
+
+
+#endif  // RBTREE_HH_

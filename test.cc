@@ -6,6 +6,7 @@ exit
 #include <iostream>
 #include <vector>
 #include <sys/time.h>
+#include <time.h>
 
 #include "seqcover.hh"
 #include "rbtree.hh"
@@ -14,26 +15,20 @@ exit
 using covkey_t = unsigned short;
 using intcov = seq_cover<covkey_t>;
 
-int COMP(covkey_t k1, covkey_t k2) {
+struct NODE : rbtree_node
+{
+	covkey_t key;
+};
+int COMP(const rbtree::node& n1, const rbtree::node& n2)
+{
+	covkey_t k1 = static_cast<const NODE&>(n1).key;
+	covkey_t k2 = static_cast<const NODE&>(n2).key;
 	if (k1 < k2) return -1;
 	if (k1 > k2) return 1;
 	return 0;
 }
 
-struct NODE
-{
-	rbtree_node<NODE> node;
-	covkey_t key;
-};
-using TREE = rbtree_<
-    covkey_t,                 // KEY_TYPE
-    NODE,                   // VALUE_TYPE
-    &COMP,               // KEY_COMPARE
-    rbtree_node<NODE> NODE::*, // LINK_METHOD
-    &NODE::node,         // LINK
-    covkey_t NODE::*,            // KEY_METHOD
-    &NODE::key              // KEY
->;
+using TREE = rbtree_of<&COMP>;
 
 struct time_sum
 {
@@ -90,8 +85,8 @@ void unit_one(covkey_t n, intcov& cov)
 		else
 			tree.remove(&nodes[val]);
 
-		std::cout << tree.validate();
-		tree.print();
+		//std::cout << tree.validate();
+		//tree.print();
 
 		flags[val] = !flags[val];
 	}
@@ -135,8 +130,23 @@ void unit(covkey_t n, intcov& cov)
 
 void report(const intcov& cov)
 {
+	std::cout << "--------------\n";
+
+	timeval tv;
+	gettimeofday(&tv, nullptr);
+	tm* t = localtime(&tv.tv_sec);
 	std::cout <<
-	"--------------\nunit/cut  : " <<
+	t->tm_year + 1900 << '-' <<
+	t->tm_mon + 1 << '-' <<
+	t->tm_mday << ' ' <<
+	t->tm_hour << ':' <<
+	t->tm_min << ':' <<
+	t->tm_sec << '.';
+	std::cout.width(6);
+	std::cout.fill('0');
+	std::cout << tv.tv_usec <<
+
+	"\nunit/cut  : " << 
 	unit_cnt << " / " << cov.get_cut_cnt() <<
 	"\nunit time : ";
 	unit_time.print();
@@ -240,7 +250,7 @@ void test(covkey_t n)
 		if (!next)
 			break;
 
-		if ((unit_cnt & 0xffff) == 0) {
+		if ((unit_cnt & 0xfffff) == 0) {
 			report(cov);
 		}
 
@@ -263,6 +273,13 @@ int main(int argc, const char* argv[])
 		from = atoi(argv[1]);
 	if (argc >= 3)
 		to = atoi(argv[2]);
+
+	timeval tv;
+	gettimeofday(&tv, nullptr);
+	std::cout << ctime(&tv.tv_sec) << '.';
+	std::cout.width(6);
+	std::cout.fill('0');
+	std::cout << tv.tv_usec << std::endl;
 
 	for (covkey_t n = from; n <= to; ++n) {
 		test(n);
