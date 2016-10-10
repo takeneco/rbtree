@@ -1,8 +1,10 @@
 #if 0
-g++ -static -std=c++11 -o ${0/cc/out} $0
+#g++ -O2 -static -std=c++11 -o ${0/cc/out} $0 rbtree.cc
+g++ -g -std=c++11 -o ${0/cc/out} $0 rbtree.cc
 exit
 #endif
 
+#include <algorithm>
 #include <iostream>
 #include <vector>
 #include <sys/time.h>
@@ -11,24 +13,6 @@ exit
 #include "seqcover.hh"
 #include "rbtree.hh"
 
-
-using covkey_t = unsigned short;
-using intcov = seq_cover<covkey_t>;
-
-struct NODE : rbtree_node
-{
-	covkey_t key;
-};
-int COMP(const rbtree::node& n1, const rbtree::node& n2)
-{
-	covkey_t k1 = static_cast<const NODE&>(n1).key;
-	covkey_t k2 = static_cast<const NODE&>(n2).key;
-	if (k1 < k2) return -1;
-	if (k1 > k2) return 1;
-	return 0;
-}
-
-using TREE = rbtree_of<&COMP>;
 
 struct time_sum
 {
@@ -61,204 +45,356 @@ struct time_sum
 	}
 } unit_time;
 
-unsigned long unit_cnt = 0;
-
-void unit_one(covkey_t n, intcov& cov)
+std::ostream& operator << (std::ostream& os, const timeval& tv)
 {
-	std::vector<bool> flags(n, false);
-	TREE tree;
-	NODE* nodes = new NODE[n];
-
-	for (covkey_t i = 0; i < n; ++i)
-		nodes[i].key = i;
-
-	timeval t_t1, t_t2;
-
-	gettimeofday(&t_t1, nullptr);
-	for (covkey_t i = 0; ; ++i) {
-		covkey_t val = cov.get_seq(i);
-		if (val == cov.INVALID)
-			break;
-
-		if (!flags[val])
-			tree.insert(&nodes[val]);
-		else
-			tree.remove(&nodes[val]);
-
-		//std::cout << tree.validate();
-		//tree.print();
-
-		flags[val] = !flags[val];
-	}
-	gettimeofday(&t_t2, nullptr);
-
-	unit_time.add(&t_t1, &t_t2);
-
-	delete [] nodes;
-}
-
-void unit(covkey_t n, intcov& cov)
-{
-	std::vector<bool> flags(n, false);
-	TREE tree;
-	NODE* nodes = new NODE[n];
-
-	for (covkey_t i = 0; i < n; ++i)
-		nodes[i].key = i;
-
-	timeval t_t1, t_t2;
-
-	gettimeofday(&t_t1, nullptr);
-	for (covkey_t i = 0; ; ++i) {
-		covkey_t val = cov.get_seq(i);
-		if (val == cov.INVALID)
-			break;
-
-		if (!flags[val])
-			tree.insert(&nodes[val]);
-		else
-			tree.remove(&nodes[val]);
-
-		flags[val] = !flags[val];
-	}
-	gettimeofday(&t_t2, nullptr);
-
-	unit_time.add(&t_t1, &t_t2);
-
-	delete [] nodes;
-}
-
-void report(const intcov& cov)
-{
-	std::cout << "--------------\n";
-
-	timeval tv;
-	gettimeofday(&tv, nullptr);
 	tm* t = localtime(&tv.tv_sec);
-	std::cout <<
-	t->tm_year + 1900 << '-' <<
-	t->tm_mon + 1 << '-' <<
-	t->tm_mday << ' ' <<
-	t->tm_hour << ':' <<
-	t->tm_min << ':' <<
-	t->tm_sec << '.';
+	char buf[21];
+	strftime(buf, sizeof buf, "%F %T.", t);
+
+	std::cout << buf;
 	std::cout.width(6);
 	std::cout.fill('0');
-	std::cout << tv.tv_usec <<
-
-	"\nunit/cut  : " << 
-	unit_cnt << " / " << cov.get_cut_cnt() <<
-	"\nunit time : ";
-	unit_time.print();
-	std::cout << "\nstate     : ";
-	for (covkey_t i = 0; ; ++i) {
-		covkey_t stat = cov.get_state(i);
-		if (stat == cov.INVALID) {
-			break;
-		}
-		std::cout << stat << ',';
-	}
-	std::cout << "\norder     : ";
-	for (covkey_t i = 0; ; ++i) {
-		covkey_t val = cov.get_seq(i);
-		if (val == cov.INVALID) {
-			std::cout << std::endl;
-			break;
-		}
-		std::cout << val << ',';
-	}
+	std::cout << tv.tv_usec;
 }
 
-void print_order(const intcov& cov)
+using testkey_t = unsigned short;
+using seqnum_t = unsigned int;
+
+struct NODE : rbtree::node
 {
-	for (covkey_t i = 0; ; ++i) {
-		covkey_t val = cov.get_seq(i);
-		if (val == cov.INVALID) {
-			std::cout << std::endl;
-			break;
-		}
-		std::cout << val << ',';
+	testkey_t key;
+};
+int COMP(const rbtree::node& n1, const rbtree::node& n2)
+{
+	auto k1 = static_cast<const NODE&>(n1).key;
+	auto k2 = static_cast<const NODE&>(n2).key;
+	if (k1 < k2) return -1;
+	if (k1 > k2) return 1;
+	return 0;
+}
+inline testkey_t key_of(rbtree::node* n) {
+	return static_cast<NODE*>(n)->key;
+}
+
+/// rbtree class extension for test.
+class test_rbtree : public rbtree_of<COMP>
+{
+public:
+	test_rbtree() {}
+
+	int validate();
+	void print();
+
+private:
+	static int _validate(rbtree::node* n);
+	static void _print(rbtree::node* n);
+};
+
+int test_rbtree::validate()
+{
+	if (!root)
+		return 0;
+
+	if (parent_of(root))
+		return 1;
+
+	if (is_red(root))
+		return 2;
+
+	return _validate(root);
+}
+
+void test_rbtree::print()
+{
+	_print(root);
+}
+
+int test_rbtree::_validate(rbtree::node* n)
+{
+	testkey_t key = key_of(n);
+	auto left = left_of(n);
+	if (left) {
+		if (key_of(left) >= key)
+			return 3;
+		if (parent_of(left) != n)
+			return 4;
+		int r = _validate(left);
+		if (r)
+			return r;
 	}
+	auto* right = right_of(n);
+	if (right) {
+		if (key_of(right) <= key)
+			return 5;
+		if (parent_of(right) != n)
+			return 6;
+		int r = _validate(right);
+		if (r)
+			return r;
+	}
+	return 0;
+}
+
+void test_rbtree::_print(rbtree::node* n)
+{
+	std::cout << '[';
+	if (n) {
+		auto* left = left_of(n);
+		if (left)
+			_print(left);
+		std::cout << '-' << key_of(n);
+		if (is_red(n))
+			std::cout << '*';
+		std::cout << '-';
+		auto* right = right_of(n);
+		if (right)
+			_print(right);
+	}
+	std::cout << ']';
+}
+
+class rbtree_tester
+{
+	enum {
+		KEY_DUPS = 2,
+	};
+public:
+	using cnt_t    = unsigned long;
+
+	enum : testkey_t {
+		INVALID = 0xffff,
+		MAX = 0xfffe,
+	};
+
+public:
+	rbtree_tester(testkey_t key_number) :
+		key_num(key_number),
+		seq_num(static_cast<seqnum_t>(key_num) * KEY_DUPS),
+		test_cnt(0),
+		seq(nullptr),
+		insert_flags(seq_num, false),
+		nodes(nullptr)
+	{
+	}
+
+	bool setup();
+	void unsetup();
+	bool next();
+	void test_one();
+	void test();
+	void print_sequence();
+	void print_report();
+
+public:
+	testkey_t key_num;
+	seqnum_t  seq_num;
+	cnt_t     test_cnt;
+
+	testkey_t*  seq;
+
+private:
+	std::vector<bool> insert_flags;
+	NODE* nodes;
+};
+
+bool rbtree_tester::setup()
+{
+	seq = new testkey_t[seq_num];
+	if (!seq)
+		return false;
+
+	nodes = new NODE[seq_num];
+	if (!nodes)
+		return false;
+
+	for (testkey_t k = 0; k < key_num; ++k) {
+		for (int dup = 0; dup < KEY_DUPS; ++dup) {
+			seqnum_t n = static_cast<seqnum_t>(k) * KEY_DUPS + dup;
+			seq[n] = k;
+		}
+	}
+
+	for (testkey_t i = 0; i < key_num; ++i)
+		nodes[i].key = i;
+
+	return true;
+}
+
+void rbtree_tester::unsetup()
+{
+	delete [] seq;
+	seq = nullptr;
+
+	delete [] nodes;
+	nodes = nullptr;
+}
+
+bool rbtree_tester::next()
+{
+	return std::next_permutation(&seq[0], &seq[seq_num-1]);
+}
+
+void rbtree_tester::test_one()
+{
+	insert_flags.assign(seq_num, false);
+
+	timeval t_t1, t_t2;
+
+	gettimeofday(&t_t1, nullptr);
+
+	test_rbtree tree;
+	for (seqnum_t i = 0; i < seq_num; ++i) {
+		testkey_t key = nodes[seq[i]].key;
+
+		if (!insert_flags[key])
+			tree.insert(&nodes[key]);
+		else
+			tree.remove(&nodes[key]);
+
+		insert_flags[key] = !insert_flags[key];
+
+		std::cout << tree.validate();
+		tree.print();
+		std::cout << std::endl;
+	}
+
+	gettimeofday(&t_t2, nullptr);
+
+	unit_time.add(&t_t1, &t_t2);
+
+	++test_cnt;
+}
+
+void rbtree_tester::test()
+{
+	insert_flags.assign(seq_num, false);
+
+	timeval t_t1, t_t2;
+
+	gettimeofday(&t_t1, nullptr);
+
+	test_rbtree tree;
+	for (seqnum_t i = 0; i < seq_num; ++i) {
+		testkey_t key = nodes[seq[i]].key;
+
+		if (!insert_flags[key])
+			tree.insert(&nodes[key]);
+		else
+			tree.remove(&nodes[key]);
+
+		insert_flags[key] = !insert_flags[key];
+
+		int valid = tree.validate();
+		if (valid) {
+			std::cout << "!!!" << valid << ":";
+			print_sequence();
+		}
+	}
+
+	gettimeofday(&t_t2, nullptr);
+
+	unit_time.add(&t_t1, &t_t2);
+
+	++test_cnt;
+}
+
+void rbtree_tester::print_report()
+{
+	timeval tv;
+	gettimeofday(&tv, nullptr);
+
+	std::cout <<
+	"--------------\n" <<
+	tv <<
+	"\ncount : " << test_cnt <<
+	"\ntime  : "; unit_time.print();
+
+	std::cout << "\nseq   : ";
+	for (testkey_t i = 0; i < seq_num; ++i) {
+		std::cout << seq[i] << ',';
+	}
+
+	std::cout << std::endl;
+}
+
+void rbtree_tester::print_sequence()
+{
+	for (seqnum_t i = 0; i < seq_num; ++i) {
+		std::cout << seq[i] << ',';
+	}
+	std::cout << std::endl;
 }
 
 void test_one()
 {
-	const int n = 6;
-	covkey_t order[n * 2] = {
-	0,5,5,4,4,3,3,2,2,1,1,0,
+	const int n = 5;
+	testkey_t start_seq[n * 2] = {
+	0,2,3,1,3,0,1,2,4,4,
 	};
 
-	intcov cov(n, 2);
-	cov.setup();
+	rbtree_tester tester(n);
+	tester.setup();
 
-	for (covkey_t i = 0; i < (n * 2); ++i)
-		cov.set_seq(order[i], i);
+	for (testkey_t i = 0; i < (n * 2); ++i)
+		tester.seq[i] = start_seq[i];
 
-	print_order(cov);
-	unit_one(n, cov);
-	++unit_cnt;
+	tester.print_sequence();
 
-	report(cov);
+	tester.test_one();
 
-	cov.unsetup();
+	tester.unsetup();
 }
 
 void test_from()
 {
-	const int n = 6;
-	covkey_t start_state[n * 2] = {
-	0,9,7,3,0,0,2,4,1,0,1,0,
+	const int n = 5;
+	testkey_t start_seq[n * 2] = {
+	0,2,3,1,3,0,1,2,4,4,
 	};
 
-	intcov cov(n, 2);
-	cov.setup();
+	rbtree_tester tester(n);
+	tester.setup();
 
-	for (covkey_t i = 0; i < (n * 2); ++i)
-		cov.set_state(start_state[i], i);
-	cov.update_seq();
+	for (seqnum_t i = 0; i < (n * 2); ++i)
+		tester.seq[i] = start_seq[i];
 
 	for (;;) {
-		print_order(cov);
-		unit(n, cov);
-		++unit_cnt;
+		tester.print_sequence();
 
-		bool next = cov.next_order();
-		if (!next)
-			break;
+		tester.test();
 
-		if ((unit_cnt & 0xffff) == 0) {
-			report(cov);
+		if ((tester.test_cnt & 0xffff) == 0) {
+			tester.print_report();
 		}
 
+		if (!tester.next())
+			break;
 	}
 
-	report(cov);
+	tester.print_report();
 
-	cov.unsetup();
+	tester.unsetup();
 }
 
-void test(covkey_t n)
+void test(int n)
 {
-	intcov cov(n, 2);
-	cov.setup();
+	rbtree_tester tester(n);
+	tester.setup();
 
 	for (;;) {
-		unit(n, cov);
-		++unit_cnt;
+		tester.test();
 
-		bool next = cov.next_order();
-		if (!next)
-			break;
-
-		if ((unit_cnt & 0xfffff) == 0) {
-			report(cov);
+		if ((tester.test_cnt & 0xffffff) == 0) {
+			tester.print_report();
 		}
 
+		if (!tester.next())
+			break;
 	}
 
-	report(cov);
+	tester.print_report();
 
-	cov.unsetup();
+	tester.unsetup();
 }
 
 int main(int argc, const char* argv[])
@@ -267,8 +403,8 @@ int main(int argc, const char* argv[])
 
 	//test_from();
 
-	covkey_t from = 1;
-	covkey_t to = 8;
+	int from = 1;
+	int to = 9;
 	if (argc >= 2)
 		from = atoi(argv[1]);
 	if (argc >= 3)
@@ -276,12 +412,9 @@ int main(int argc, const char* argv[])
 
 	timeval tv;
 	gettimeofday(&tv, nullptr);
-	std::cout << ctime(&tv.tv_sec) << '.';
-	std::cout.width(6);
-	std::cout.fill('0');
-	std::cout << tv.tv_usec << std::endl;
+	std::cout << tv << std::endl;
 
-	for (covkey_t n = from; n <= to; ++n) {
+	for (int n = from; n <= to; ++n) {
 		test(n);
 	}
 
