@@ -1,28 +1,18 @@
+// ビットフィールドは順番が処理系依存なので使えない
 
 #ifndef RBTREE_HH_
 #define RBTREE_HH_
 
 
-template<class A, class B, class D, D E>
-class member_ptr
-{};
-template<class RETURN, class CLASS, RETURN CLASS::* VARIABLE>
-class member_ptr<RETURN, CLASS, RETURN CLASS::*, VARIABLE>
-{
-public:
-	static RETURN* p(CLASS* x) { return &(x->*VARIABLE); }
-};
-template<class RETURN, class CLASS, RETURN* (CLASS::* FUNC)()>
-class member_ptr<RETURN, CLASS, RETURN* (CLASS::*)(), FUNC>
-{
-public:
-	static RETURN* p(CLASS* x) { return (x->*FUNC)(); }
-};
-
-
 class rbtree
 {
-	enum COLOR { RED = 0, BLACK = 1, };
+	using uptr = unsigned long;
+
+	enum COLOR {
+		RED = 0,
+		BLACK = 1,
+		COLOR_MASK = 0x1,
+	};
 
 public:
 	class node
@@ -32,10 +22,9 @@ public:
 		node() {}
 
 	private:
-		node* parent;
+		uptr parent_and_color;
 		node* left;
 		node* right;
-		COLOR color;
 	};
 
 public:
@@ -45,7 +34,8 @@ public:
 	void remove(node* val);
 
 protected:
-	static COLOR get_color(node* n);
+	static COLOR color_of(node* n);
+	static void set_color(COLOR c, node* n);
 	static bool is_red(node* n);
 	static bool is_black(node* n);
 	static node* parent_of_red(node* n);
@@ -53,17 +43,15 @@ protected:
 	static node* left_of(node* n);
 	static node* right_of(node* n);
 	static void set_parent_and_color(node* parent, COLOR c, node* n);
-	static void set_parent(node* n, node* parent);
+	static void set_parent(node* parent, node* n);
 	static void set_left(node* parent, node* left);
 	static void set_right(node* parent, node* right);
 	void change_child(node* parent, node* old_child, node* new_child);
-	node* rotate_left(node* val);
-	node* rotate_right(node* val);
-	node* rotate_leftright(node* val);
-	node* rotate_rightleft(node* val);
+	static node* rotate_left(node* n);
+	static node* rotate_right(node* n);
 	void inserted_balance(node* parent);
-	void  removed_balance(node* parent);
-	node* get_most_right(node* val);
+	void removed_balance(node* parent);
+	static node* get_most_right(node* val);
 	void replace(node* old_node, node* new_node);
 
 protected:
@@ -128,3 +116,4 @@ private:
 
 
 #endif  // RBTREE_HH_
+
